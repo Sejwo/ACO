@@ -1,3 +1,6 @@
+//forgot to comment this, absolutely outdated and integrated in the src file, i will be shuffling them around as I go
+
+
 use std::fs::File;
 use std::io::{ BufRead, BufReader };
 
