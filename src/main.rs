@@ -1,18 +1,16 @@
-use rand::distributions::Distribution;
-use rand::distributions::WeightedIndex;
+use rand::distributions::{ Distribution, WeightedIndex };
 use rand::Rng;
-use std::error::Error;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use office::{Excel, Range, DataType};
-use Aco::utils::usize_float_multiplication;
-//next step im considering is making a stack struct for the ants,
-//since each ant will only use a single array of known size and type by the time of intialisation of the ant
-//with that essentially I'll be able to maybe speed up each operation around saving a path for each ant, now i could probably do it by just using arrays since all sizes are known
-//but truth be told based off this https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html and this https://doc.rust-lang.org/book/ch03-02-data-types.html but I got kind of intimidated
-//what if I use the default stack? I understand stack as essentially an array right? So I push i32 of 1 on the stack, then I push another i32 of 2, if I want to access the 1st value do I have to pop the second?
-//22.07.24 ye, so essentially i can't use arrays since their size needs to be known at compile time and since all the vectors are dependant on the distances matrix it's Joever
-//what I may do instead since I'm unsure if the stack can be even optimal is writing another parser for data which takes long/lats and creates a matrix based on them, or even a nice map
+use std::{
+    f64::consts::PI,
+    error::Error,
+    fs::File,
+    io::BufRead,
+    io::BufReader,
+    collections::HashMap,
+};
+use office::{ Excel, Range, DataType };
+use Aco::utils::{usize_float_multiplication, calculate_distances};
+
 pub struct Ant {
     current_city: usize,
     distance_traveled: f64,
@@ -77,7 +75,9 @@ impl Ant {
         if total_probability == 0.0 {
             return self.start_city;
         }
-        let dist = WeightedIndex::new(&row_probabilities).expect("problem jakiś no");
+        let dist = WeightedIndex::new(&row_probabilities).expect(
+            "Issue with initiating probability for next move: "
+        );
         let chosen = model.cities[dist.sample(&mut rng)];
         chosen
     }
@@ -99,10 +99,12 @@ struct AcoModel {
     final_beta: f64,
     alpha_scaling: f64,
     beta_scaling: f64,
+    city_names: HashMap<usize, String>,
 }
 
 impl AcoModel {
-    fn new(distances: Vec<Vec<f64>>) -> Self {
+    fn new(distances: Vec<Vec<f64>>, city_names: Option<HashMap<usize, String>>) -> Self {
+        let city_names = city_names.unwrap_or(HashMap::new());
         let cities = (0..distances.len()).collect();
         let best_distance = f64::MAX;
         let best_path = vec![];
@@ -119,6 +121,7 @@ impl AcoModel {
         let beta_scaling = 1.1;
         Self {
             cities,
+            city_names,
             distances,
             best_distance,
             best_path,
@@ -151,7 +154,10 @@ impl AcoModel {
             if num_cities == 0 {
                 num_cities = parts.len();
             }
-            let row: Vec<f64> = parts.iter().map(|&x| x.parse().unwrap()).collect();
+            let row: Vec<f64> = parts
+                .iter()
+                .map(|&x| x.parse().unwrap())
+                .collect();
             distances.push(row);
         }
 
@@ -159,17 +165,78 @@ impl AcoModel {
             return Err("The number of rows does not match the number of cities".into());
         }
 
-        Ok(Self::new(distances))
+        Ok(Self::new(distances, None))
     }
-    //fn new_from_excel(file_path: &str, sheet: Option<&str>) -> AcoModel{
-      //  sheet.unwrap_or("Sheet1").to_string();
-       // let mut workbook = Excel::open(file_path).unwrap(); 
-       // let r = workbook.worksheet_range(sheet);
-       // for row in r.rows() {
-        //    println!("row={:?}, row[0]={:?}", row, row[0]);
-       // }
-       // return Self::new(vec![vec![1.0,2.0,3.0]]);
-    //} //work in progress
+    fn new_from_excel(file_path: &str, sheet: Option<&str>) -> Result<AcoModel, Box<dyn Error>> {
+        //for this I am strictly assuming a format of |Name of City/Place| Longitude| Latitude| ... where the data I'll be operating on is in the first 3 columns
+        // I guess this could be optimised heavily but I am not trying to write pandas for rust
+        // probably pola.rs would be the solution here, but I want to limit the library count and if I can get it working without learning a new crate that is preferable.
+        let sheet_name = sheet.unwrap_or("Sheet1").to_string();
+        let mut workbook = Excel::open(file_path).expect("Cannot open Excel file");
+        let mut cities: HashMap<String, Vec<f64>> = HashMap::new();
+        if let Ok(range) = workbook.worksheet_range(&sheet_name) {
+            for row in range.rows() {
+                if row.len() >= 3 {
+                    let city_name = match &row[0] {
+                        DataType::String(name) => name.clone(),
+                        _ => panic!("Expected a string for city name"),
+                    };
+                    let longitude = match &row[1] {
+                        DataType::Float(val) => *val,
+                        DataType::String(val) =>
+                            val
+                                .parse::<f64>()
+                                .unwrap_or_else(|_| {
+                                    panic!("Expected a float value for longitude found String({})", val)
+                                }),
+                        _ => panic!("Expected a float value for longitude found {:?}", &row[1]),
+                    };
+
+                    // Extract latitude
+                    let latitude = match &row[2] {
+                        DataType::Float(val) => *val,
+                        DataType::String(val) =>
+                            val
+                                .parse::<f64>()
+                                .unwrap_or_else(|_| {
+                                    panic!("Expected a float value for latitude found String({})", val)
+                                }),
+                        _ => panic!("Expected a float value for latitude found {:?}", &row[2]),
+                    };
+
+                    cities.insert(city_name, vec![longitude, latitude]);
+                } else {
+                    panic!("Each row must have at least 3 columns");
+                }
+            }
+        } else {
+            panic!("Cannot find the specified worksheet");
+        }
+        let city_indices: HashMap<usize, String> = cities
+            .keys()
+            .enumerate()
+            .map(|(i, name)| (i, name.clone()))
+            .collect();
+        let coordinates: Vec<Vec<f64>> = cities.values().cloned().collect();
+        let num_cities = cities.len();
+        let mut distances = vec![vec![0.0; num_cities];num_cities];
+        for i in 0..num_cities {
+            for j in 0..num_cities {
+                if i == j {
+                    distances[i][j] = 0.0;
+                } else {
+                    println!("{:?} and {:?}", city_indices[&i], city_indices[&j]);
+                    distances[i][j] = calculate_distances(
+                        coordinates[i][1],
+                        coordinates[j][1],
+                        coordinates[i][0],
+                        coordinates[j][0]
+                    );
+                }
+            }
+        }
+        Ok(AcoModel::new(distances, Some(city_indices)))
+    }
     fn update_pheromones(&mut self, ants: &Vec<Ant>, average_distance: f64) {
         // Evaporation step
         for row in self.pheromones.iter_mut() {
@@ -196,6 +263,9 @@ impl AcoModel {
     }
     fn run_model(&mut self) {
         let mut iterations_without_improvement = 0;
+        for vecs in &self.distances {
+            println!("{:?} \n", vecs);
+        }
 
         for iteration in 0..self.number_of_iterations {
             // Regenerate ants each cycle
@@ -216,12 +286,13 @@ impl AcoModel {
             for ant in &ants {
                 if ant.distance_traveled < self.best_distance {
                     println!(
-                        "new best at {:?} \n 
+                        "\n 
+                    new best at {:?} \n 
                     beating previous best at {:?} \n 
                     on iteration {} \n
                     with alpha of {} \n
                     beta of {} \n
-                    and current pheromone matrix {:?}
+                    and current pheromone matrix: \n {:?} \n
                     ",
                         ant.distance_traveled,
                         self.best_distance,
@@ -256,7 +327,17 @@ impl AcoModel {
             }
             println!();
         }
-        println!("Best path: {:?}", self.best_path);
+
+        if !self.city_names.is_empty() {
+            let mut best_path_cities = vec![];
+            for city in &self.best_path {
+                best_path_cities.push(self.city_names[&city].clone());
+            }
+            println!("Best path: {:?}", self.best_path);
+            println!("Best path: {:?}", best_path_cities);
+        } else {
+            println!("Best path: {:?}", self.best_path);
+        }
         println!("Best distance: {:.2}", self.best_distance);
     }
 
@@ -290,23 +371,30 @@ impl AcoModel {
         self.beta_scaling = beta;
     }
     fn calculate_average_distance(ants: &Vec<Ant>) -> f64 {
-        let total_distance: f64 = ants.iter().map(|ant| ant.distance_traveled).sum();
-        total_distance / ants.len() as f64
+        let total_distance: f64 = ants
+            .iter()
+            .map(|ant| ant.distance_traveled)
+            .sum();
+        total_distance / (ants.len() as f64)
     }
 }
 
 fn main() {
-    //let path = "src\\fri26_d.txt";
-    let path = "src\\sgb128_dist.txt"; //something i realised around this file, pheromone values should either be really high(or the distance values could be normalised to floats <100)
-    //let path = "src\\five_d.txt";
-    //let path = "src\\gr17_d.txt";
-    let mut model = AcoModel::new_from_file(path).unwrap();
-    model.set_number_of_iterations(50);
+    //let path = "fri26_d.txt";
+    //let path = "sgb128_dist.txt";
+    //let path = "five_d.txt";
+    //let path = "gr17_d.txt";
+    //let mut model = AcoModel::new_from_file(path).expect("Failed to initiate model: ");
+    let path = "test_excel.xlsx";
+    let mut model = AcoModel::new_from_excel(path, Some("Sheet1")).expect(
+        "Failed to initate model: "
+    );
+    model.set_number_of_iterations(100);
     model.set_ant_count(10000);
     model.set_init_alpha(2.0);
     model.set_init_beta(1.0);
     model.set_decay(0.5);
-    model.set_pheromone_value(4.0); //because this is by any means an arbitrary number but with increments of 5-14 this just didn't make sense
+    model.set_pheromone_value(4.0); //apparently when i fixed the code the number here doesn't really matter so that's good
     println!("Starting model");
     model.run_model();
     model.print_results();
