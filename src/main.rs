@@ -1,4 +1,4 @@
-use Aco::structs::{ AcoModel };
+use aco::structs::{ AcoModel };
 fn main() {
     //let path = "fri26_d.txt";
     //let path = "sgb128_dist.txt";

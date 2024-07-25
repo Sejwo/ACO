@@ -5,7 +5,7 @@ pub fn usize_float_multiplication(value: usize, multiplier: f64) -> usize {
 }
 
 pub fn degrees_to_radians(deg: f64) -> f64 {
-    deg * (std::f64::consts::PI / 180.0)
+    deg * (PI / 180.0)
 }
 pub fn calculate_distances(lat1: f64, lat2: f64, long1: f64, long2: f64) -> f64 {
     // solution source https://stackoverflow.com/questions/27928/calculate-distance-between-two-latitude-longitude-points-haversine-formula

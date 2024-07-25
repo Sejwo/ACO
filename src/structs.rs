@@ -96,17 +96,69 @@ pub struct AcoModel {
 }
 
 impl AcoModel {
+    fn update_pheromones(&mut self, ants: &Vec<Ant>, average_distance: f64) {
+        // Evaporation step
+        for row in self.pheromones.iter_mut() {
+            for pheromone in row.iter_mut() {
+                *pheromone *= self.decay;
+            }
+        }
+
+        // Deposit step, only for ants with distance less than the average
+        for ant in ants {
+            if ant.distance_traveled < average_distance {
+                for window in ant.path_taken.windows(2) {
+                    if let [from, to] = window {
+                        if from != to {
+                            let pheromone_deposit =
+                                self.pheromone_value / self.distances[*from][*to];
+                            self.pheromones[*from][*to] += pheromone_deposit;
+                            self.pheromones[*to][*from] += pheromone_deposit;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn print_results(&self) {
+        println!("Pheromone matrix:");
+        for row in self.pheromones.iter() {
+            for pheromone in row.iter() {
+                print!("{:.2} ", pheromone);
+            }
+            println!();
+        }
+
+        if !self.city_names.is_empty() {
+            let mut best_path_cities = vec![];
+            for city in &self.best_path {
+                best_path_cities.push(self.city_names[&city].clone());
+            }
+            println!("Best path: {:?}", self.best_path);
+            println!("Best path: {:?}", best_path_cities);
+        } else {
+            println!("Best path: {:?}", self.best_path);
+        }
+        println!("Best distance: {:.2}", self.best_distance);
+    }
+    fn calculate_average_distance(ants: &Vec<Ant>) -> f64 {
+        let total_distance: f64 = ants
+            .iter()
+            .map(|ant| ant.distance_traveled)
+            .sum();
+        total_distance / (ants.len() as f64)
+    }
     fn new(distances: Vec<Vec<f64>>, city_names: Option<HashMap<usize, String>>) -> Self {
         let city_names = city_names.unwrap_or(HashMap::new());
         let cities = (0..distances.len()).collect();
         let best_distance = f64::MAX;
         let best_path = vec![];
-        let pheromone_value = 1.0;
+        let pheromone_value = 4.0;
         let pheromones = vec![vec![0.5; distances.len()]; distances.len()];
-        let number_of_iterations = 10;
-        let decay = 1.0;
-        let ant_count = 100;
-        let init_alpha = 1.0;
+        let number_of_iterations = 55;
+        let decay = 0.5;
+        let ant_count = 5555;
+        let init_alpha = 1.1;
         let init_beta = 1.0;
         let final_alpha = init_alpha;
         let final_beta = init_beta;
@@ -233,30 +285,6 @@ impl AcoModel {
         }
         Ok(AcoModel::new(distances, Some(city_indices)))
     }
-    fn update_pheromones(&mut self, ants: &Vec<Ant>, average_distance: f64) {
-        // Evaporation step
-        for row in self.pheromones.iter_mut() {
-            for pheromone in row.iter_mut() {
-                *pheromone *= self.decay;
-            }
-        }
-
-        // Deposit step, only for ants with distance less than the average
-        for ant in ants {
-            if ant.distance_traveled < average_distance {
-                for window in ant.path_taken.windows(2) {
-                    if let [from, to] = window {
-                        if from != to {
-                            let pheromone_deposit =
-                                self.pheromone_value / self.distances[*from][*to];
-                            self.pheromones[*from][*to] += pheromone_deposit;
-                            self.pheromones[*to][*from] += pheromone_deposit;
-                        }
-                    }
-                }
-            }
-        }
-    }
     pub fn run_model(&mut self) {
         let mut iterations_without_improvement = 0;
         for vecs in &self.distances {
@@ -316,27 +344,6 @@ impl AcoModel {
         }
         self.print_results()
     }
-    fn print_results(&self) {
-        println!("Pheromone matrix:");
-        for row in self.pheromones.iter() {
-            for pheromone in row.iter() {
-                print!("{:.2} ", pheromone);
-            }
-            println!();
-        }
-
-        if !self.city_names.is_empty() {
-            let mut best_path_cities = vec![];
-            for city in &self.best_path {
-                best_path_cities.push(self.city_names[&city].clone());
-            }
-            println!("Best path: {:?}", self.best_path);
-            println!("Best path: {:?}", best_path_cities);
-        } else {
-            println!("Best path: {:?}", self.best_path);
-        }
-        println!("Best distance: {:.2}", self.best_distance);
-    }
 
     pub fn set_number_of_iterations(&mut self, number_of_iterations: usize) {
         self.number_of_iterations = number_of_iterations;
@@ -367,11 +374,8 @@ impl AcoModel {
         self.alpha_scaling = alpha;
         self.beta_scaling = beta;
     }
-    fn calculate_average_distance(ants: &Vec<Ant>) -> f64 {
-        let total_distance: f64 = ants
-            .iter()
-            .map(|ant| ant.distance_traveled)
-            .sum();
-        total_distance / (ants.len() as f64)
+    pub fn return_best_result(&self) -> f64{
+        self.best_distance.clone()
     }
+
 }
