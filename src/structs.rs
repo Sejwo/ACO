@@ -5,17 +5,17 @@ use office::{ Excel, Range, DataType };
 use crate::utils::{ usize_float_multiplication, calculate_distances };
 
 struct Ant {
-    current_city: u32,
+    current_city: usize,
     distance_traveled: f64,
-    visited_cities: Vec<u32>,
-    start_city: u32,
-    path_taken: Vec<u32>,
+    visited_cities: Vec<usize>,
+    start_city: usize,
+    path_taken: Vec<usize>,
     alpha: f64,
     beta: f64,
 }
 
 impl Ant {
-    fn new(num_cities: u32, alpha: f64, beta: f64) -> Self {
+    fn new(num_cities: usize, alpha: f64, beta: f64) -> Self {
         let current_city = rand::thread_rng().gen_range(0..num_cities);
         let distance_traveled = 0.0;
         let visited_cities = vec![];
@@ -34,31 +34,31 @@ impl Ant {
 
     fn generate_path(&mut self, model: &AcoModel) {
         self.visited_cities.clear();
-        let mut result_path: Vec<u32> = vec![];
+        let mut result_path: Vec<usize> = vec![];
         self.visited_cities.push(self.current_city);
         for _ in 0..model.cities.len() - 1 {
             result_path.push(self.current_city);
             let next_city = self.pick_move(model);
-            self.distance_traveled += model.distances[self.current_city as usize][next_city as usize];
+            self.distance_traveled += model.distances[self.current_city][next_city];
             self.current_city = next_city;
             self.visited_cities.push(self.current_city);
         }
-        self.distance_traveled += model.distances[self.current_city as usize][self.start_city as usize];
+        self.distance_traveled += model.distances[self.current_city][self.start_city];
         result_path.push(self.start_city);
         self.path_taken = result_path;
     }
 
-    fn pick_move(&self, model: &AcoModel) -> u32 {
+    fn pick_move(&self, model: &AcoModel) -> usize {
         let current_city = self.current_city;
         let mut rng = rand::thread_rng();
         let mut row_probabilities: Vec<f64> = Vec::new();
         //
 
         // Calculate row probabilities considering only unvisited cities
-        for (index, &pheromone) in model.pheromones[current_city as usize].iter().enumerate() {
+        for (index, &pheromone) in model.pheromones[current_city].iter().enumerate() {
             if !self.visited_cities.contains(&index) {
-                let dist: f64 = 1.0 / model.distances[current_city as usize][index];
-                let probability: f64 = pheromone.powf(self.alpha) * dist.powf(self.beta);
+                let dist = 1.0 / model.distances[current_city][index];
+                let probability = pheromone.powf(self.alpha) * dist.powf(self.beta);
                 row_probabilities.push(probability);
             } else {
                 row_probabilities.push(0.0); // Set probability to 0 for visited cities
@@ -77,22 +77,22 @@ impl Ant {
 }
 
 pub struct AcoModel {
-    cities: Vec<u32>,
+    cities: Vec<usize>,
     distances: Vec<Vec<f64>>,
     best_distance: f64,
-    best_path: Vec<u32>,
+    best_path: Vec<usize>,
     pheromones: Vec<Vec<f64>>,
     pheromone_value: f64,
     decay: f64,
-    number_of_iterations: u32,
-    ant_count: u32,
+    number_of_iterations: usize,
+    ant_count: usize,
     init_alpha: f64,
     init_beta: f64,
     final_alpha: f64,
     final_beta: f64,
     alpha_scaling: f64,
     beta_scaling: f64,
-    city_names: HashMap<u32, String>,
+    city_names: HashMap<usize, String>,
 }
 
 impl AcoModel {
@@ -112,8 +112,8 @@ impl AcoModel {
                         if from != to {
                             let pheromone_deposit =
                                 self.pheromone_value / self.distances[*from][*to];
-                            self.pheromones[*from as usize][*to as usize] += pheromone_deposit;
-                            self.pheromones[*to as usize][*from as usize] += pheromone_deposit;
+                            self.pheromones[*from][*to] += pheromone_deposit;
+                            self.pheromones[*to][*from] += pheromone_deposit;
                         }
                     }
                 }
@@ -148,9 +148,9 @@ impl AcoModel {
             .sum();
         total_distance / (ants.len() as f64)
     }
-    fn new(distances: Vec<Vec<f64>>, city_names: Option<HashMap<u32, String>>) -> Self {
+    fn new(distances: Vec<Vec<f64>>, city_names: Option<HashMap<usize, String>>) -> Self {
         let city_names = city_names.unwrap_or(HashMap::new());
-        let cities = (0..distances.len());
+        let cities = (0..distances.len()).collect();
         let best_distance = f64::MAX;
         let best_path = vec![];
         let pheromone_value = 4.0;
@@ -260,12 +260,11 @@ impl AcoModel {
         } else {
             panic!("Cannot find the specified worksheet");
         }
-        let city_indices: HashMap<u32, String> = cities
+        let city_indices: HashMap<usize, String> = cities
             .keys()
             .enumerate()
             .map(|(i, name)| (i, name.clone()))
-            .try_into()
-            .unwrap();
+            .collect();
         let coordinates: Vec<Vec<f64>> = cities.values().cloned().collect();
         let num_cities = cities.len();
         let mut distances = vec![vec![0.0; num_cities];num_cities];
@@ -274,7 +273,7 @@ impl AcoModel {
                 if i == j {
                     distances[i][j] = 0.0;
                 } else {
-                    println!("{:?} and {:?}", city_indices[&(i as u32)], city_indices[&(j as u32)]);
+                    println!("{:?} and {:?}", city_indices[&i], city_indices[&j]);
                     distances[i][j] = calculate_distances(
                         coordinates[i][1],
                         coordinates[j][1],
@@ -295,7 +294,7 @@ impl AcoModel {
         for iteration in 0..self.number_of_iterations {
             // Regenerate ants each cycle
             let mut ants: Vec<Ant> = (0..self.ant_count)
-                .map(|_| Ant::new(self.cities.len().try_into().unwrap(), self.final_alpha, self.final_beta))
+                .map(|_| Ant::new(self.cities.len(), self.final_alpha, self.final_beta))
                 .collect();
 
             for ant in &mut ants {
@@ -346,11 +345,11 @@ impl AcoModel {
         self.print_results()
     }
 
-    pub fn set_number_of_iterations(&mut self, number_of_iterations: u32) {
+    pub fn set_number_of_iterations(&mut self, number_of_iterations: usize) {
         self.number_of_iterations = number_of_iterations;
     }
 
-    pub fn set_ant_count(&mut self, ant_count: u32) {
+    pub fn set_ant_count(&mut self, ant_count: usize) {
         self.ant_count = ant_count;
     }
 
