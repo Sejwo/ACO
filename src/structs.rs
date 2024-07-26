@@ -5,17 +5,17 @@ use office::{ Excel, Range, DataType };
 use crate::utils::{ usize_float_multiplication, calculate_distances };
 
 struct Ant {
-    current_city: usize,
+    current_city: u32,
     distance_traveled: f64,
-    visited_cities: Vec<usize>,
-    start_city: usize,
-    path_taken: Vec<usize>,
+    visited_cities: Vec<u32>,
+    start_city: u32,
+    path_taken: Vec<u32>,
     alpha: f64,
     beta: f64,
 }
 
 impl Ant {
-    fn new(num_cities: usize, alpha: f64, beta: f64) -> Self {
+    fn new(num_cities: u32, alpha: f64, beta: f64) -> Self {
         let current_city = rand::thread_rng().gen_range(0..num_cities);
         let distance_traveled = 0.0;
         let visited_cities = vec![];
@@ -34,7 +34,7 @@ impl Ant {
 
     fn generate_path(&mut self, model: &AcoModel) {
         self.visited_cities.clear();
-        let mut result_path: Vec<usize> = vec![];
+        let mut result_path: Vec<u32> = vec![];
         self.visited_cities.push(self.current_city);
         for _ in 0..model.cities.len() - 1 {
             result_path.push(self.current_city);
@@ -48,7 +48,7 @@ impl Ant {
         self.path_taken = result_path;
     }
 
-    fn pick_move(&self, model: &AcoModel) -> usize {
+    fn pick_move(&self, model: &AcoModel) -> u32 {
         let current_city = self.current_city;
         let mut rng = rand::thread_rng();
         let mut row_probabilities: Vec<f64> = Vec::new();
@@ -77,22 +77,22 @@ impl Ant {
 }
 
 pub struct AcoModel {
-    cities: Vec<usize>,
+    cities: Vec<u32>,
     distances: Vec<Vec<f64>>,
     best_distance: f64,
-    best_path: Vec<usize>,
+    best_path: Vec<u32>,
     pheromones: Vec<Vec<f64>>,
     pheromone_value: f64,
     decay: f64,
-    number_of_iterations: usize,
-    ant_count: usize,
+    number_of_iterations: u32,
+    ant_count: u32,
     init_alpha: f64,
     init_beta: f64,
     final_alpha: f64,
     final_beta: f64,
     alpha_scaling: f64,
     beta_scaling: f64,
-    city_names: HashMap<usize, String>,
+    city_names: HashMap<u32, String>,
 }
 
 impl AcoModel {
@@ -148,7 +148,7 @@ impl AcoModel {
             .sum();
         total_distance / (ants.len() as f64)
     }
-    fn new(distances: Vec<Vec<f64>>, city_names: Option<HashMap<usize, String>>) -> Self {
+    fn new(distances: Vec<Vec<f64>>, city_names: Option<HashMap<u32, String>>) -> Self {
         let city_names = city_names.unwrap_or(HashMap::new());
         let cities = (0..distances.len()).collect();
         let best_distance = f64::MAX;
@@ -260,7 +260,7 @@ impl AcoModel {
         } else {
             panic!("Cannot find the specified worksheet");
         }
-        let city_indices: HashMap<usize, String> = cities
+        let city_indices: HashMap<u32, String> = cities
             .keys()
             .enumerate()
             .map(|(i, name)| (i, name.clone()))
@@ -345,11 +345,11 @@ impl AcoModel {
         self.print_results()
     }
 
-    pub fn set_number_of_iterations(&mut self, number_of_iterations: usize) {
+    pub fn set_number_of_iterations(&mut self, number_of_iterations: u32) {
         self.number_of_iterations = number_of_iterations;
     }
 
-    pub fn set_ant_count(&mut self, ant_count: usize) {
+    pub fn set_ant_count(&mut self, ant_count: u32) {
         self.ant_count = ant_count;
     }
 
