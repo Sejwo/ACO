@@ -121,13 +121,13 @@ impl AcoModel {
         }
     }
     fn print_results(&self) {
-        println!("Pheromone matrix:");
-        for row in self.pheromones.iter() {
-            for pheromone in row.iter() {
-                print!("{:.2} ", pheromone);
-            }
-            println!();
-        }
+        //println!("Pheromone matrix:");
+        //for row in self.pheromones.iter() {
+        //    for pheromone in row.iter() {
+        //        print!("{:.2} ", pheromone);
+        //    }
+        //    println!();
+        //}
 
         if !self.city_names.is_empty() {
             let mut best_path_cities = vec![];
@@ -162,8 +162,8 @@ impl AcoModel {
         let init_beta = 1.0;
         let final_alpha = init_alpha;
         let final_beta = init_beta;
-        let alpha_scaling = 0.9;
-        let beta_scaling = 1.1;
+        let alpha_scaling = 0.85;
+        let beta_scaling = 1.3;
         Self {
             cities,
             city_names,
@@ -205,11 +205,9 @@ impl AcoModel {
                 .collect();
             distances.push(row);
         }
-
         if distances.len() != num_cities {
             return Err("The number of rows does not match the number of cities".into());
         }
-
         Ok(Self::new(distances, None))
     }
     pub fn new_from_excel(
@@ -260,6 +258,7 @@ impl AcoModel {
         } else {
             panic!("Cannot find the specified worksheet");
         }
+        drop(workbook);
         let city_indices: HashMap<usize, String> = cities
             .keys()
             .enumerate()
@@ -273,7 +272,6 @@ impl AcoModel {
                 if i == j {
                     distances[i][j] = 0.0;
                 } else {
-                    println!("{:?} and {:?}", city_indices[&i], city_indices[&j]);
                     distances[i][j] = calculate_distances(
                         coordinates[i][1],
                         coordinates[j][1],
@@ -287,9 +285,6 @@ impl AcoModel {
     }
     pub fn run_model(&mut self) {
         let mut iterations_without_improvement = 0;
-        for vecs in &self.distances {
-            println!("{:?} \n", vecs);
-        }
 
         for iteration in 0..self.number_of_iterations {
             // Regenerate ants each cycle
@@ -316,14 +311,12 @@ impl AcoModel {
                     on iteration {} \n
                     with alpha of {} \n
                     beta of {} \n
-                    and current pheromone matrix: \n {:?} \n
                     ",
                         ant.distance_traveled,
                         self.best_distance,
                         iteration,
                         self.final_alpha,
-                        self.final_beta,
-                        self.pheromones
+                        self.final_beta
                     );
                     self.best_distance = ant.distance_traveled;
                     self.best_path = ant.visited_cities.clone();
@@ -339,6 +332,10 @@ impl AcoModel {
                     self.final_alpha *= self.alpha_scaling;
                     self.final_beta *= self.beta_scaling;
                     iterations_without_improvement = 0;
+                    println!("Alpha and beta adjusted");
+                }
+                if self.final_alpha <= (self.final_alpha)/2.0 | iterations_without_improvement >= (self.number_of_iterations/10) - 1 {
+                    self.pheromones = vec![vec![0.5; self.distances.len()]; self.distances.len()]; //added reseting of pheromones, once enough stagnation is reached
                 }
             }
         }
@@ -374,8 +371,7 @@ impl AcoModel {
         self.alpha_scaling = alpha;
         self.beta_scaling = beta;
     }
-    pub fn return_best_result(&self) -> f64{
+    pub fn return_best_result(&self) -> f64 {
         self.best_distance.clone()
     }
-
 }
