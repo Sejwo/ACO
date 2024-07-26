@@ -16,5 +16,6 @@ fn main() {
     model.set_init_beta(1.5);
     model.set_decay(0.85);
     model.set_pheromone_value(4.0); //apparently when i fixed the code the number here doesn't really matter so that's good
+    model.set_rank_limit(20000.0*0.1 as u32); // since i added rank limits(how many best ants will get to leave their pheromones i am including this and creating a branch)
     model.run_model();
 }
