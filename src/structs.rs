@@ -97,7 +97,7 @@ pub struct AcoModel {
 }
 
 impl AcoModel {
-    fn update_pheromones(&mut self, ants: &mut Vec<Ant>, average_distance: f64) {
+    fn update_pheromones(&mut self, ants: &mut Vec<Ant>, _average_distance: f64) {
         // Evaporation step
         for row in self.pheromones.iter_mut() {
             for pheromone in row.iter_mut() {
