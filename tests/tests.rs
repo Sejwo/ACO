@@ -1,3 +1,5 @@
+// 5 first tests were taken from https://people.sc.fsu.edu/~jburkardt/datasets/tsp/tsp.html
+
 #[cfg(test)]
 mod tests {
     use aco::structs::AcoModel;
