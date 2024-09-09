@@ -93,25 +93,28 @@ pub struct AcoModel {
     alpha_scaling: f64,
     beta_scaling: f64,
     city_names: HashMap<usize, String>,
+    rank_limit: u32,
 }
 
 impl AcoModel {
-    fn update_pheromones(&mut self, ants: &Vec<Ant>, average_distance: f64) {
+    fn update_pheromones(&mut self, ants: &mut Vec<Ant>, _average_distance: f64) {
         // Evaporation step
         for row in self.pheromones.iter_mut() {
             for pheromone in row.iter_mut() {
                 *pheromone *= self.decay;
             }
         }
+        ants.sort_by(|a, b| a.distance_traveled.partial_cmp(&b.distance_traveled).unwrap());
 
         // Deposit step, only for ants with distance less than the average
-        for ant in ants {
-            if ant.distance_traveled < average_distance {
+        for (rank, ant) in ants.iter().enumerate() {
+            if (rank as u32) <= self.rank_limit {
+                let weight = ((self.rank_limit - (rank as u32)) as f64) / (self.rank_limit as f64);
                 for window in ant.path_taken.windows(2) {
                     if let [from, to] = window {
                         if from != to {
                             let pheromone_deposit =
-                                self.pheromone_value / self.distances[*from][*to];
+                                (self.pheromone_value * weight) / self.distances[*from][*to];
                             self.pheromones[*from][*to] += pheromone_deposit;
                             self.pheromones[*to][*from] += pheromone_deposit;
                         }
@@ -164,6 +167,7 @@ impl AcoModel {
         let final_beta = init_beta;
         let alpha_scaling = 0.85;
         let beta_scaling = 1.3;
+        let rank_limit = 10;
         Self {
             cities,
             city_names,
@@ -181,6 +185,7 @@ impl AcoModel {
             final_beta,
             alpha_scaling,
             beta_scaling,
+            rank_limit,
         }
     }
 
@@ -299,7 +304,7 @@ impl AcoModel {
             let average_distance = AcoModel::calculate_average_distance(&ants);
 
             // Update pheromones selectively
-            self.update_pheromones(&ants, average_distance);
+            self.update_pheromones(&mut ants, average_distance);
 
             let mut improved = false;
             for ant in &ants {
@@ -334,7 +339,10 @@ impl AcoModel {
                     iterations_without_improvement = 0;
                     println!("Alpha and beta adjusted");
                 }
-                if self.final_alpha <= (self.final_alpha)/2.0 | iterations_without_improvement >= (self.number_of_iterations/10) - 1 {
+                if
+                    (self.final_alpha <= self.final_alpha / 2.0) &
+                    (iterations_without_improvement >= self.number_of_iterations / 10 - 1)
+                {
                     self.pheromones = vec![vec![0.5; self.distances.len()]; self.distances.len()]; //added reseting of pheromones, once enough stagnation is reached
                 }
             }
@@ -370,6 +378,9 @@ impl AcoModel {
     pub fn set_alpha_beta_scaling(&mut self, alpha: f64, beta: f64) {
         self.alpha_scaling = alpha;
         self.beta_scaling = beta;
+    }
+    pub fn set_rank_limit(&mut self, rank_limit: u32) {
+        self.rank_limit = rank_limit;
     }
     pub fn return_best_result(&self) -> f64 {
         self.best_distance.clone()
