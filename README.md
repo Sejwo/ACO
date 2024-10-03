@@ -8,10 +8,13 @@ I kind of want it to be a "real crate" so that it can work outside of strict bou
 To get it to a perfect Rustic shape, it will take time and a long evening(s) with the handbook.
 
 Treat the below as a loose todo list:
+
 -I will definately come back to this but as is it's able to solve most easy problems,with the more complex ones I will have to do some tuning to the decision/pheromone dispersion algorithm:
   - I'm well aware the current power of 1.1 solution is faulty at best
   - I was thinking maybe borrowing some easings functions from the JS community could perhaps make the changes more plastic (i.e. slower progression with short stagnation, bigger progression with with longer stagnation)
-  - Re-evalutating the 2D array approach, it just seems needlesly repetitive to apply the pheromones to both directions on the matrix (i.e. after an ant passes from city 1 to city 5 i need to apply pheromone to both [1][5] and [5][1] 
+  - Re-evalutating the 2D array approach, it just seems needlesly repetitive to apply the pheromones to both directions on the matrix (i.e. after an ant passes from city 1 to city 5 i need to apply pheromone to both [1][5] and [5][1]
+  - With that there is the case of presentation. This is by any means a debug only version and the model should be able to parse data by itself(like with the excel file solution but better)
+  - And an even more important one, allowing mass tweaking with parameters is a must 
 
 -If I had some cash I'd probably try using google street maps API to better map distances between places
 (namely. rather than using geographic distance in straight line i could use how long is the distance for commuting between cities)
