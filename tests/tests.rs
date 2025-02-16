@@ -46,12 +46,12 @@ mod tests {
     fn dantzig42_d_test() {
         let path = "tests\\dantzig42_d.txt";
         let mut model_dantzig42_d = AcoModel::new_from_file(path).expect("Failed to read file: ");
-        model_dantzig42_d.set_number_of_iterations(75);
+        model_dantzig42_d.set_number_of_iterations(10000);
         model_dantzig42_d.set_ant_count(7500);
         model_dantzig42_d.set_init_alpha(2.0);
         model_dantzig42_d.set_init_beta(1.0);
         model_dantzig42_d.set_decay(0.5);
-        model_dantzig42_d.set_pheromone_value(4.0);
+        model_dantzig42_d.set_pheromone_value(3.0);
         model_dantzig42_d.run_model();
         assert_eq!(model_dantzig42_d.return_best_result(), 699.0);
     }
@@ -59,12 +59,12 @@ mod tests {
     fn att48_d_test() {
         let path = "tests\\att48_d.txt";
         let mut model_att48_d = AcoModel::new_from_file(path).expect("Failed to read file: ");
-        model_att48_d.set_number_of_iterations(100);
+        model_att48_d.set_number_of_iterations(10000);
         model_att48_d.set_ant_count(9999);
         model_att48_d.set_init_alpha(2.0);
         model_att48_d.set_init_beta(1.0);
         model_att48_d.set_decay(0.5);
-        model_att48_d.set_pheromone_value(4.0);
+        model_att48_d.set_pheromone_value(3.0);
         model_att48_d.run_model();
         assert_eq!(model_att48_d.return_best_result(), 33523.0);
     }

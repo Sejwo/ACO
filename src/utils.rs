@@ -1,4 +1,5 @@
 use std::f64::consts::PI;
+use crate::structs::AcoModel;
 
 pub fn usize_float_multiplication(value: usize, multiplier: f64) -> usize {
     ((value as f64) * multiplier).round() as usize
@@ -21,4 +22,12 @@ pub fn calculate_distances(lat1: f64, lat2: f64, long1: f64, long2: f64) -> f64 
     let c = 2.0 * temp.sqrt().atan2((1.0 - temp).sqrt());
     println!("{:?}", r * c);
     r * c
+}
+
+pub fn read_from_txt_file(path:&str) -> AcoModel{
+    AcoModel::new_from_file(path).expect("Failed to initiate model: ")
+}
+
+pub fn read_from_tsp_file(path:&str) -> AcoModel{
+    AcoModel::new_from_tsp(path).expect("Failed to initiate model: ")
 }

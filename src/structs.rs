@@ -1,112 +1,146 @@
-use rand::distributions::{ Distribution, WeightedIndex };
+use rand::distributions::{Distribution, WeightedIndex};
 use rand::Rng;
-use std::{ error::Error, fs::File, io::BufRead, io::BufReader, collections::HashMap };
-use office::{ Excel, Range, DataType };
-use crate::utils::{ usize_float_multiplication, calculate_distances };
+use std::{
+    collections::HashMap,
+    error::Error,
+    fs::File,
+    io::{BufRead, BufReader},
+};
+use office::{Excel, Range, DataType};
+use crate::utils::{usize_float_multiplication, calculate_distances};
 
-struct Ant {
-    current_city: usize,
-    distance_traveled: f64,
-    visited_cities: Vec<usize>,
-    start_city: usize,
-    path_taken: Vec<usize>,
-    alpha: f64,
-    beta: f64,
+/// Represents a distance matrix for a TSP instance.
+pub struct DistanceMatrix {
+    distances: Vec<Vec<f64>>,
+}
+
+impl DistanceMatrix {
+    pub fn new(num_cities: usize) -> Self {
+        Self {
+            distances: vec![vec![0.0; num_cities]; num_cities],
+        }
+    }
+
+    /// Build a DistanceMatrix from an existing 2D vector.
+    pub fn from_vec(distances: Vec<Vec<f64>>) -> Self {
+        Self { distances }
+    }
+
+    pub fn get_distance(&self, from: usize, to: usize) -> f64 {
+        self.distances[from][to]
+    }
+
+    pub fn set_distance(&mut self, from: usize, to: usize, distance: f64) {
+        self.distances[from][to] = distance;
+        self.distances[to][from] = distance; // Assuming symmetric TSP
+    }
+
+    pub fn len(&self) -> usize {
+        self.distances.len()
+    }
+
+    pub fn as_vec(&self) -> &Vec<Vec<f64>> {
+        &self.distances
+    }
+}
+
+/// Represents a single ant in the ACO algorithm.
+pub struct Ant {
+    pub current_city: usize,
+    pub distance_traveled: f64,
+    pub visited_cities: Vec<usize>,
+    pub start_city: usize,
+    pub path_taken: Vec<usize>,
+    pub alpha: f64,
+    pub beta: f64,
 }
 
 impl Ant {
-    fn new(num_cities: usize, alpha: f64, beta: f64) -> Self {
+    pub fn new(num_cities: usize, alpha: f64, beta: f64) -> Self {
         let current_city = rand::thread_rng().gen_range(0..num_cities);
-        let distance_traveled = 0.0;
-        let visited_cities = vec![];
-        let start_city = current_city;
-        let path_taken = vec![];
         Self {
             current_city,
-            distance_traveled,
-            visited_cities,
-            start_city,
-            path_taken,
+            distance_traveled: 0.0,
+            visited_cities: Vec::new(),
+            start_city: current_city,
+            path_taken: Vec::new(),
             alpha,
             beta,
         }
     }
 
-    fn generate_path(&mut self, model: &AcoModel) {
+    pub fn generate_path(&mut self, model: &AcoModel) {
         self.visited_cities.clear();
-        let mut result_path: Vec<usize> = vec![];
+        let mut result_path: Vec<usize> = Vec::new();
         self.visited_cities.push(self.current_city);
         for _ in 0..model.cities.len() - 1 {
             result_path.push(self.current_city);
             let next_city = self.pick_move(model);
-            self.distance_traveled += model.distances[self.current_city][next_city];
+            self.distance_traveled += model.distances.get_distance(self.current_city, next_city);
             self.current_city = next_city;
             self.visited_cities.push(self.current_city);
         }
-        self.distance_traveled += model.distances[self.current_city][self.start_city];
+        self.distance_traveled += model.distances.get_distance(self.current_city, self.start_city);
         result_path.push(self.start_city);
         self.path_taken = result_path;
     }
 
-    fn pick_move(&self, model: &AcoModel) -> usize {
+    pub fn pick_move(&self, model: &AcoModel) -> usize {
         let current_city = self.current_city;
         let mut rng = rand::thread_rng();
         let mut row_probabilities: Vec<f64> = Vec::new();
-        //
 
-        // Calculate row probabilities considering only unvisited cities
+        // Calculate probabilities for moving to each unvisited city.
         for (index, &pheromone) in model.pheromones[current_city].iter().enumerate() {
             if !self.visited_cities.contains(&index) {
-                let dist = 1.0 / model.distances[current_city][index];
+                let dist = 1.0 / model.distances.get_distance(current_city, index);
                 let probability = pheromone.powf(self.alpha) * dist.powf(self.beta);
                 row_probabilities.push(probability);
             } else {
-                row_probabilities.push(0.0); // Set probability to 0 for visited cities
+                row_probabilities.push(0.0);
             }
         }
         let total_probability: f64 = row_probabilities.iter().sum();
         if total_probability == 0.0 {
             return self.start_city;
         }
-        let dist = WeightedIndex::new(&row_probabilities).expect(
-            "Issue with initiating probability for next move: "
-        );
-        let chosen = model.cities[dist.sample(&mut rng)];
-        chosen
+        let dist = WeightedIndex::new(&row_probabilities)
+            .expect("Issue with initiating probability for next move");
+        model.cities[dist.sample(&mut rng)]
     }
 }
 
+/// Represents the overall ACO model.
 pub struct AcoModel {
-    cities: Vec<usize>,
-    distances: Vec<Vec<f64>>,
-    best_distance: f64,
-    best_path: Vec<usize>,
-    pheromones: Vec<Vec<f64>>,
-    pheromone_value: f64,
-    decay: f64,
-    number_of_iterations: usize,
-    ant_count: usize,
-    init_alpha: f64,
-    init_beta: f64,
-    final_alpha: f64,
-    final_beta: f64,
-    alpha_scaling: f64,
-    beta_scaling: f64,
-    city_names: HashMap<usize, String>,
-    rank_limit: u32,
+    pub cities: Vec<usize>,
+    pub distances: DistanceMatrix,
+    pub best_distance: f64,
+    pub best_path: Vec<usize>,
+    pub pheromones: Vec<Vec<f64>>,
+    pub pheromone_value: f64,
+    pub decay: f64,
+    pub number_of_iterations: usize,
+    pub ant_count: usize,
+    pub init_alpha: f64,
+    pub init_beta: f64,
+    pub final_alpha: f64,
+    pub final_beta: f64,
+    pub alpha_scaling: f64,
+    pub beta_scaling: f64,
+    pub city_names: HashMap<usize, String>,
+    pub rank_limit: u32,
 }
 
 impl AcoModel {
     fn update_pheromones(&mut self, ants: &mut Vec<Ant>, _average_distance: f64) {
-        // Evaporation step
+        // Evaporation step.
         for row in self.pheromones.iter_mut() {
             for pheromone in row.iter_mut() {
                 *pheromone *= self.decay;
             }
         }
         ants.sort_by(|a, b| a.distance_traveled.partial_cmp(&b.distance_traveled).unwrap());
-
-        // Deposit step, only for ants with distance less than the average
+        // Deposit step for the top-ranked ants.
         for (rank, ant) in ants.iter().enumerate() {
             if (rank as u32) <= self.rank_limit {
                 let weight = ((self.rank_limit - (rank as u32)) as f64) / (self.rank_limit as f64);
@@ -114,7 +148,7 @@ impl AcoModel {
                     if let [from, to] = window {
                         if from != to {
                             let pheromone_deposit =
-                                (self.pheromone_value * weight) / self.distances[*from][*to];
+                                (self.pheromone_value * weight) / self.distances.get_distance(*from, *to);
                             self.pheromones[*from][*to] += pheromone_deposit;
                             self.pheromones[*to][*from] += pheromone_deposit;
                         }
@@ -123,41 +157,34 @@ impl AcoModel {
             }
         }
     }
-    fn print_results(&self) {
-        //println!("Pheromone matrix:");
-        //for row in self.pheromones.iter() {
-        //    for pheromone in row.iter() {
-        //        print!("{:.2} ", pheromone);
-        //    }
-        //    println!();
-        //}
 
+    fn print_results(&self) {
         if !self.city_names.is_empty() {
-            let mut best_path_cities = vec![];
-            for city in &self.best_path {
-                best_path_cities.push(self.city_names[&city].clone());
-            }
-            println!("Best path: {:?}", self.best_path);
-            println!("Best path: {:?}", best_path_cities);
+            let best_path_cities: Vec<String> = self.best_path
+                .iter()
+                .map(|city| self.city_names[city].clone())
+                .collect();
+            println!("Best path (indices): {:?}", self.best_path);
+            println!("Best path (cities): {:?}", best_path_cities);
         } else {
             println!("Best path: {:?}", self.best_path);
         }
         println!("Best distance: {:.2}", self.best_distance);
     }
+
     fn calculate_average_distance(ants: &Vec<Ant>) -> f64 {
-        let total_distance: f64 = ants
-            .iter()
-            .map(|ant| ant.distance_traveled)
-            .sum();
+        let total_distance: f64 = ants.iter().map(|ant| ant.distance_traveled).sum();
         total_distance / (ants.len() as f64)
     }
+
     fn new(distances: Vec<Vec<f64>>, city_names: Option<HashMap<usize, String>>) -> Self {
+        let num_cities = distances.len();
         let city_names = city_names.unwrap_or(HashMap::new());
-        let cities = (0..distances.len()).collect();
+        let cities: Vec<usize> = (0..num_cities).collect();
         let best_distance = f64::MAX;
         let best_path = vec![];
         let pheromone_value = 4.0;
-        let pheromones = vec![vec![0.5; distances.len()]; distances.len()];
+        let pheromones = vec![vec![0.5; num_cities]; num_cities];
         let number_of_iterations = 55;
         let decay = 0.5;
         let ant_count = 5555;
@@ -171,7 +198,7 @@ impl AcoModel {
         Self {
             cities,
             city_names,
-            distances,
+            distances: DistanceMatrix::from_vec(distances),
             best_distance,
             best_path,
             pheromone_value,
@@ -189,12 +216,12 @@ impl AcoModel {
         }
     }
 
+    /// Create a new AcoModel from a text file containing a space-delimited distance matrix.
     pub fn new_from_file(file_path: &str) -> Result<AcoModel, Box<dyn Error>> {
         let file = File::open(file_path)?;
         let reader = BufReader::new(file);
         let mut num_cities = 0;
-        let mut distances = vec![];
-
+        let mut distances: Vec<Vec<f64>> = vec![];
         for line in reader.lines() {
             let line = line?;
             if line.starts_with("#") || line.trim().is_empty() {
@@ -204,24 +231,17 @@ impl AcoModel {
             if num_cities == 0 {
                 num_cities = parts.len();
             }
-            let row: Vec<f64> = parts
-                .iter()
-                .map(|&x| x.parse().unwrap())
-                .collect();
+            let row: Vec<f64> = parts.iter().map(|&x| x.parse().unwrap()).collect();
             distances.push(row);
         }
         if distances.len() != num_cities {
             return Err("The number of rows does not match the number of cities".into());
         }
-        Ok(Self::new(distances, None))
+        Ok(AcoModel::new(distances, None))
     }
-    pub fn new_from_excel(
-        file_path: &str,
-        sheet: Option<&str>
-    ) -> Result<AcoModel, Box<dyn Error>> {
-        //for this I am strictly assuming a format of |Name of City/Place| Longitude| Latitude| ... where the data I'll be operating on is in the first 3 columns
-        // I guess this could be optimised heavily but I am not trying to write pandas for rust
-        // probably pola.rs would be the solution here, but I want to limit the library count and if I can get it working without learning a new crate that is preferable.
+
+    /// Create a new AcoModel from an Excel file.
+    pub fn new_from_excel(file_path: &str, sheet: Option<&str>) -> Result<AcoModel, Box<dyn Error>> {
         let sheet_name = sheet.unwrap_or("Sheet1").to_string();
         let mut workbook = Excel::open(file_path).expect("Cannot open Excel file");
         let mut cities: HashMap<String, Vec<f64>> = HashMap::new();
@@ -234,27 +254,18 @@ impl AcoModel {
                     };
                     let longitude = match &row[1] {
                         DataType::Float(val) => *val,
-                        DataType::String(val) =>
-                            val
-                                .parse::<f64>()
-                                .unwrap_or_else(|_| {
-                                    panic!("Expected a float value for longitude found String({})", val)
-                                }),
+                        DataType::String(val) => val.parse::<f64>().unwrap_or_else(|_| {
+                            panic!("Expected a float value for longitude found String({})", val)
+                        }),
                         _ => panic!("Expected a float value for longitude found {:?}", &row[1]),
                     };
-
-                    // Extract latitude
                     let latitude = match &row[2] {
                         DataType::Float(val) => *val,
-                        DataType::String(val) =>
-                            val
-                                .parse::<f64>()
-                                .unwrap_or_else(|_| {
-                                    panic!("Expected a float value for latitude found String({})", val)
-                                }),
+                        DataType::String(val) => val.parse::<f64>().unwrap_or_else(|_| {
+                            panic!("Expected a float value for latitude found String({})", val)
+                        }),
                         _ => panic!("Expected a float value for latitude found {:?}", &row[2]),
                     };
-
                     cities.insert(city_name, vec![longitude, latitude]);
                 } else {
                     panic!("Each row must have at least 3 columns");
@@ -271,7 +282,7 @@ impl AcoModel {
             .collect();
         let coordinates: Vec<Vec<f64>> = cities.values().cloned().collect();
         let num_cities = cities.len();
-        let mut distances = vec![vec![0.0; num_cities];num_cities];
+        let mut distances = vec![vec![0.0; num_cities]; num_cities];
         for i in 0..num_cities {
             for j in 0..num_cities {
                 if i == j {
@@ -281,18 +292,115 @@ impl AcoModel {
                         coordinates[i][1],
                         coordinates[j][1],
                         coordinates[i][0],
-                        coordinates[j][0]
+                        coordinates[j][0],
                     );
                 }
             }
         }
         Ok(AcoModel::new(distances, Some(city_indices)))
     }
+
+    /// Create a new AcoModel from a TSPLIB .tsp file.
+    ///
+    /// This method now supports both files with a NODE_COORD_SECTION (coordinates) and those
+    /// with an EDGE_WEIGHT_SECTION (explicit full matrix). For your file (bays29), the
+    /// EDGE_WEIGHT_SECTION is parsed as a full distance matrix.
+    pub fn new_from_tsp(file_path: &str) -> Result<AcoModel, Box<dyn Error>> {
+        let file = File::open(file_path)?;
+        let reader = BufReader::new(file);
+        let mut dimension: Option<usize> = None;
+        let mut lines = Vec::new();
+        for line in reader.lines() {
+            lines.push(line?);
+        }
+        // Get the dimension from the header.
+        for line in &lines {
+            if line.starts_with("DIMENSION") {
+                let parts: Vec<&str> = line
+                    .split(|c: char| c == ':' || c.is_whitespace())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                if parts.len() >= 2 {
+                    dimension = parts[1].parse::<usize>().ok();
+                }
+            }
+        }
+        let dim = dimension.ok_or("Could not find DIMENSION in the .tsp file")?;
+        // Check for EDGE_WEIGHT_SECTION.
+        if lines.iter().any(|l| l.contains("EDGE_WEIGHT_SECTION")) {
+            let mut matrix_numbers: Vec<f64> = Vec::new();
+            let mut reading = false;
+            for line in lines {
+                if line.contains("EDGE_WEIGHT_SECTION") {
+                    reading = true;
+                    continue;
+                }
+                if reading {
+                    let trimmed = line.trim();
+                    if trimmed == "EOF" || trimmed.contains("DISPLAY_DATA_SECTION") {
+                        break;
+                    }
+                    for num in trimmed.split_whitespace() {
+                        matrix_numbers.push(num.parse::<f64>()?);
+                    }
+                }
+            }
+            if matrix_numbers.len() < dim * dim {
+                return Err("Not enough numbers in EDGE_WEIGHT_SECTION".into());
+            }
+            let mut matrix = vec![vec![0.0; dim]; dim];
+            for i in 0..dim {
+                for j in 0..dim {
+                    matrix[i][j] = matrix_numbers[i * dim + j];
+                }
+            }
+            return Ok(AcoModel::new(matrix, None));
+        }
+        // Otherwise, check for NODE_COORD_SECTION to parse coordinates.
+        if lines.iter().any(|l| l.contains("NODE_COORD_SECTION")) {
+            let mut coordinates: Vec<(f64, f64)> = Vec::new();
+            let mut reading = false;
+            for line in lines {
+                if line.contains("NODE_COORD_SECTION") {
+                    reading = true;
+                    continue;
+                }
+                if reading {
+                    let trimmed = line.trim();
+                    if trimmed == "EOF" {
+                        break;
+                    }
+                    let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                    if parts.len() >= 3 {
+                        let x: f64 = parts[1].parse()?;
+                        let y: f64 = parts[2].parse()?;
+                        coordinates.push((x, y));
+                    }
+                }
+            }
+            if coordinates.len() != dim {
+                return Err("Number of coordinates does not match DIMENSION".into());
+            }
+            let mut matrix = vec![vec![0.0; dim]; dim];
+            for i in 0..dim {
+                for j in 0..dim {
+                    if i != j {
+                        let dx = coordinates[i].0 - coordinates[j].0;
+                        let dy = coordinates[i].1 - coordinates[j].1;
+                        matrix[i][j] = (dx * dx + dy * dy).sqrt();
+                    }
+                }
+            }
+            return Ok(AcoModel::new(matrix, None));
+        }
+        Err("No valid section (EDGE_WEIGHT_SECTION or NODE_COORD_SECTION) found in .tsp file".into())
+    }
+
     pub fn run_model(&mut self) {
         let mut iterations_without_improvement = 0;
 
         for iteration in 0..self.number_of_iterations {
-            // Regenerate ants each cycle
+            // Regenerate ants for this iteration.
             let mut ants: Vec<Ant> = (0..self.ant_count)
                 .map(|_| Ant::new(self.cities.len(), self.final_alpha, self.final_beta))
                 .collect();
@@ -302,21 +410,13 @@ impl AcoModel {
             }
 
             let average_distance = AcoModel::calculate_average_distance(&ants);
-
-            // Update pheromones selectively
             self.update_pheromones(&mut ants, average_distance);
 
             let mut improved = false;
             for ant in &ants {
                 if ant.distance_traveled < self.best_distance {
                     println!(
-                        "\n 
-                    new best at {:?} \n 
-                    beating previous best at {:?} \n 
-                    on iteration {} \n
-                    with alpha of {} \n
-                    beta of {} \n
-                    ",
+                        "\n new best at {:?} \n beating previous best at {:?} \n on iteration {} \n with alpha of {} \n beta of {} \n",
                         ant.distance_traveled,
                         self.best_distance,
                         iteration,
@@ -339,17 +439,17 @@ impl AcoModel {
                     iterations_without_improvement = 0;
                     println!("Alpha and beta adjusted");
                 }
-                if
-                    (self.final_alpha <= self.final_alpha / 2.0) &
-                    (iterations_without_improvement >= self.number_of_iterations / 10 - 1)
+                if (self.final_alpha <= self.init_alpha / 2.0)
+                    && (iterations_without_improvement >= self.number_of_iterations / 10 - 1)
                 {
-                    self.pheromones = vec![vec![0.5; self.distances.len()]; self.distances.len()]; //added reseting of pheromones, once enough stagnation is reached
+                    self.pheromones = vec![vec![0.5; self.distances.len()]; self.distances.len()];
                 }
             }
         }
-        self.print_results()
+        self.print_results();
     }
 
+    // Setter methods for tuning the model.
     pub fn set_number_of_iterations(&mut self, number_of_iterations: usize) {
         self.number_of_iterations = number_of_iterations;
     }
@@ -375,14 +475,20 @@ impl AcoModel {
     pub fn set_decay(&mut self, decay: f64) {
         self.decay = decay;
     }
+
     pub fn set_alpha_beta_scaling(&mut self, alpha: f64, beta: f64) {
         self.alpha_scaling = alpha;
         self.beta_scaling = beta;
     }
+
     pub fn set_rank_limit(&mut self, rank_limit: u32) {
         self.rank_limit = rank_limit;
     }
+
     pub fn return_best_result(&self) -> f64 {
-        self.best_distance.clone()
+        self.best_distance
     }
+
+    // Placeholder for future graph representation methods.
+    // For example, you could later add a method like `pub fn export_graph(&self) -> Graph` here.
 }
